@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import pearsonr
+import scipy.stats
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 
@@ -43,21 +43,21 @@ get_Q_name = reverse_dict = {
 }
 
 subvencionirani_obroki = {
-        "0-krat": 0,
-        "1–3-krat": 1,
-        "4–6-krat": 2,
-        "7–9-krat": 3,
-        "10-krat ali več": 4
+        "0-krat": 1,
+        "1–3-krat": 2,
+        "4–6-krat": 3,
+        "7–9-krat": 4,
+        "10-krat ali več": 5
 }
 subvencionirani_obroki_rev = {v: k for k, v in subvencionirani_obroki.items()}
 
 
 doma_teden ={
-        "0-krat": 0,
-        "1–2-krat": 1,
-        "3–5-krat": 2,
-        "6–9-krat": 3,
-        "10-krat ali več": 4,
+        "0-krat": 1,
+        "1–2-krat": 2,
+        "3–5-krat": 3,
+        "6–9-krat": 4,
+        "10-krat ali več": 5,
 }
 doma_teden_rev = {v: k for k, v in doma_teden.items()}
 
@@ -90,8 +90,44 @@ trditve = {
 'Popolnoma se strinjam': 5,
 'Ne morem oceniti / Nimam mnenja': 6
 }
-trditve_rev = {v: k for k, v in dejavniki.items()}
+trditve_rev = {v: k for k, v in trditve.items()}
 
+spol = {
+'Moški': 1,
+'Ženski': 2,
+'Ostalo': 3,
+'Ne želim odgovoriti': 4
+}
+spol_rev = {v: k for k, v in spol.items()}
+
+bivanje ={
+'Pri starših ali družini': 1,
+'V študentskem domu': 2,
+'V lastnem stanovanju': 3,
+'Drugo': 4,
+'Ne želim odgovoriti': 5
+}
+bivanje_rev = {v: k for k, v in bivanje.items()}
+
+stopnja = {
+'Dodiplomski študij': 1,
+'Magistrski študij': 2,
+'Doktorski študij ': 3
+}
+stopnja_rev = {v: k for k, v in stopnja.items()}
+
+področje ={
+'Naravoslovje, tehnika ali informatika':1,
+'Družboslovje ali humanistika':2,
+'Zdravstvo ali medicina':3,
+'Pedagoške vede':4,
+'Umetnost':5,
+'Ekonomija':6,
+'Pravo':7,
+'Drugo':8,
+'Ne želim odgovoriti':9
+}
+področje_rev = {v: k for k, v in področje.items()}
 
 def load_and_clean_data(filepath):
     # Naloži CSV brez prve vrste (glava z vprašanji)
@@ -147,8 +183,17 @@ def load_and_clean_data(filepath):
     df['dejavniki_prirocnost']=df['dejavniki_prirocnost'].astype(int)
     df['dejavniki_druzba']=df['dejavniki_druzba'].astype(int)
     df['dejavniki_lokacija']=df['dejavniki_lokacija'].astype(int)
-
-
+    df['trditve_subcena']=df['trditve_subcena'].astype(int)
+    df['trditve_domacas']=df['trditve_domacas'].astype(int)
+    df['trditve_kontrola']=df['trditve_kontrola'].astype(int)
+    df['trditve_frend']=df['trditve_frend'].astype(int)
+    df['trditve_vpliv']=df['trditve_vpliv'].astype(int)
+    df['trditve_subzdravdrag']=df['trditve_subzdravdrag'].astype(int)
+    df['trditve_hranilna']=df['trditve_hranilna'].astype(int)
+    df['trditve_subzdrav']=df['trditve_subzdrav'].astype(int)
+    df['spol'] = df['spol'].astype(int)
+    df['bivanje'] = df['bivanje'].astype(int)
+    df['stopnja'] = df['stopnja'].astype(int)
 
 
     # če je vrednost negativna pomeni da na odgovor niso odgovorili zato ga spremenimo v NaN
@@ -158,13 +203,36 @@ def load_and_clean_data(filepath):
             # Replace negative values with NaN
             df[col] = df[col].apply(lambda x: np.nan if pd.notnull(x) and x < 0 else x)
 
+
+    # age ajdustment
+    df['starost'] = pd.to_numeric(df['starost'], errors='coerce')
+
+    df['starost'] = df['starost'].apply(
+        lambda x: 2025 - x if x > 1900 else x
+    )
+    df.loc[df['starost'] < 18, 'starost'] = np.nan
+    df.loc[df['starost'] > 35, 'starost'] = np.nan
+    df['starost'] = df['starost'].astype('Int64')
+
     # Odstrani manjkajoče
     df_clean = df.dropna(subset=["subvencionirani_obroki", "ocena_prehrane", "doma_teden","sub_obrok_hitra_hrana","sub_obrok_menza","sub_obrok_klasika", "sub_obrok_drugo", "sub_obrok_drugo_text", 'dejavniki_cena',
     'dejavniki_okus',
     'dejavniki_zdravje',
     'dejavniki_prirocnost',
     'dejavniki_druzba',
-    'dejavniki_lokacija'
+    'dejavniki_lokacija',
+    'trditve_subcena',
+    'trditve_domacas',
+    'trditve_kontrola',
+    'trditve_frend',
+    'trditve_vpliv',
+    'trditve_subzdravdrag',
+    'trditve_hranilna',
+    'trditve_subzdrav',
+    'starost',
+    'spol',
+    'bivanje',
+    'stopnja'
     ])
     return df_clean
 
@@ -189,11 +257,12 @@ def subvencionirani_obroki(df):
         # določite vrstni red z uporabo ključev iz reverse_ocena_map
         order = [subvencionirani_obroki_rev[i] for i in (subvencionirani_obroki_rev.keys())]
 
+        print(df_display_hist)
         sns.countplot(df_display_hist, order=order, stat='count')
 
         plt.title(get_Q_name['subvencionirani_obroki'])
-        plt.xlabel("Pogostost")
-        plt.ylabel("Število študentov")
+        plt.xlabel("Število študentov")
+        plt.ylabel("")
 
         # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
         plt.xticks(rotation=45, ha='right')
@@ -227,12 +296,11 @@ def sub_obrok_tip(df):
     plt.figure(figsize=(10, 12))
     sns.barplot(x=columns, y=counts)
     plt.ylabel('Število')
-    plt.xlabel('Kategorija')
+    plt.xlabel('')
     plt.title('Kolikokrat je bila posamezna izbira označena')
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
-
 
 def doma_teden(df):
     """Izpiši osnovne statistike."""
@@ -258,8 +326,8 @@ def doma_teden(df):
         sns.countplot(df_display_hist, order=order, stat='count')
 
         plt.title(get_Q_name['doma_teden'])
-        plt.xlabel("Pogostost")
-        plt.ylabel("Število študentov")
+        plt.xlabel("Število študentov")
+        plt.ylabel("")
 
         # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
         plt.xticks(rotation=45, ha='right')
@@ -290,8 +358,8 @@ def ocena_prehrane(df):
         sns.countplot(df_display_hist, order=order, stat='count')
 
         plt.title("Distribucija ocen prehrane")
-        plt.xlabel("Ocena prehrane")  # Spremenjeno v "Ocena prehrane", saj so etikete že opisne
-        plt.ylabel("Število študentov")
+        plt.xlabel("Število študentov")  # Spremenjeno v "Ocena prehrane", saj so etikete že opisne
+        plt.ylabel("Ocena prehrane")
 
         # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
         plt.xticks(rotation=45, ha='right')
@@ -317,8 +385,8 @@ def loop_dejavniki(df, dejavnik):
     sns.countplot(df_display_hist, order=order, stat='count')
 
     plt.title(get_Q_name[dejavnik])
-    plt.xlabel("Pogostost")
-    plt.ylabel("Kategorija")
+    plt.xlabel("Število študentov")
+    plt.ylabel("")
 
     # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
     plt.xticks(rotation=45, ha='right')
@@ -350,8 +418,8 @@ def loop_trditve(df, trditev):
     sns.countplot(df_display_hist, order=order, stat='count')
 
     plt.title(get_Q_name[trditev])
-    plt.xlabel("Pogostost")
-    plt.ylabel("Kategorija")
+    plt.xlabel("Število študentov")
+    plt.ylabel("")
 
     # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
     plt.xticks(rotation=45, ha='right')
@@ -364,50 +432,157 @@ def trditve(df):
     for trditev in vse_trditve:
         loop_trditve(df, trditev)
 
-def correlation_analysis(df):
-    """Pearson korelacija med subvencioniranimi obroki in oceno prehrane."""
-    corr, p_val = pearsonr(df["subvencionirani_obroki"], df["ocena_prehrane"])
-    print(f"\n🔗 Korelacija: r = {corr:.2f}, p = {p_val:.4f}")
-    return corr, p_val
+def startost(df):
+    """Izpiši osnovne statistike."""
+    print('Vprašanje: ' + get_Q_name["starost"])
+    print("\n📊 Deskriptivna statistika:")
+    pd.options.display.float_format = '{:.2f}'.format
+    print(df["starost"].describe())
+    
+    # Preverite, ali so vrednosti v stolpcu številke, preden jih mapirate.
+    temp_d_numeric = pd.to_numeric(df["starost"], errors='coerce').dropna()
+    
+    # Preslikaj številčne vrednosti v opisne za prikaz
+    df_display_hist = df['starost']
 
-def regression_analysis(df):
-    """Enostavna linearna regresija: obroki → prehrana."""
-    X = df[["subvencionirani_obroki"]]
-    y = df["ocena_prehrane"]
-
-    model = LinearRegression()
-    model.fit(X, y)
-    y_pred = model.predict(X)
-
-    print(f"\n📈 Regresijska enačba: prehrana = {model.intercept_:.2f} + {model.coef_[0]:.2f} * obroki")
-    print(f"R² (pojasnjena varianca): {r2_score(y, y_pred):.3f}")
-
-    # Vizualizacija
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(x="subvencionirani_obroki", y="ocena_prehrane", data=df)
-    plt.plot(df["subvencionirani_obroki"], y_pred, color="red", label="Regresijska premica")
-    plt.title("Regresija: Subvencionirani obroki → Ocena prehrane")
-    plt.xlabel("Št. subvencioniranih obrokov / teden")
-    plt.ylabel("Ocena prehrane (1–6)")
-    plt.legend()
+    
+    # Uporabite pd.Categorical za zagotovitev pravilnega vrstnega reda na X-osi
+    # določite vrstni red z uporabo ključev iz reverse_ocena_map
+    order = []
+    
+    df['starost'].value_counts().sort_index().plot(kind='bar', figsize=(10,5))
+    plt.title(get_Q_name['starost'])
+    plt.xlabel("Starost")
+    plt.ylabel("Število študentov")
+    
+    # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
+    plt.xticks(rotation=45, ha='right')
+    
     plt.tight_layout()
     plt.show()
 
-def analyze_by_group(df, group_col):
-    """Skupinska analiza po izbranem demografskem stolpcu (če obstaja)."""
-    if group_col in df.columns:
-        print(f"\nSkupinska analiza po '{group_col}':")
-        grouped = df.groupby(group_col).mean(numeric_only=True)[["uporaba_subvencioniranih_obrokov", "ocena_kakovosti_prehrane"]]
-        print(grouped)
+def spol(df):
+    """Izpiši osnovne statistike."""
+    print('Vprašanje: ' + get_Q_name["spol"])
 
-        plt.figure(figsize=(8, 6))
-        sns.boxplot(x=group_col, y="ocena_kakovosti_prehrane", data=df)
-        plt.title(f"Kakovost prehrane glede na {group_col}")
-        plt.tight_layout()
-        plt.show()
-    else:
-        print(f"\nStolpec '{group_col}' ni prisoten v podatkih.")
+    # Preverite, ali so vrednosti v stolpcu številke, preden jih mapirate.
+    temp_d_numeric = pd.to_numeric(df["spol"], errors='coerce').dropna()
 
+    # Preslikaj številčne vrednosti v opisne za prikaz
+    df_display_hist = temp_d_numeric.map(spol_rev)
+    plt.figure(figsize=(8, 6))
+
+    # Uporabite pd.Categorical za zagotovitev pravilnega vrstnega reda na X-osi
+    # določite vrstni red z uporabo ključev iz reverse_ocena_map
+    order = [spol_rev[i] for i in (spol_rev.keys())]
+
+    sns.countplot(df_display_hist, order=order, stat='count')
+
+    plt.title(get_Q_name['spol'])
+    plt.xlabel("Število študentov")
+    plt.ylabel("Spol")
+
+    # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
+    plt.xticks(rotation=45, ha='right')
+
+    plt.tight_layout()
+    plt.show()
+
+def bivanje(df):
+    """Izpiši osnovne statistike."""
+    print('Vprašanje: ' + get_Q_name["bivanje"])
+
+    print("\n📊 Deskriptivna statistika:")
+    pd.options.display.float_format = '{:.2f}'.format
+    print(df["bivanje"].describe())
+
+    # Preverite, ali so vrednosti v stolpcu številke, preden jih mapirate.
+    temp_d_numeric = pd.to_numeric(df["bivanje"], errors='coerce').dropna()
+
+    # Preslikaj številčne vrednosti v opisne za prikaz
+
+    df_display_hist = temp_d_numeric.map(bivanje_rev)
+    plt.figure(figsize=(8, 6))
+
+    # Uporabite pd.Categorical za zagotovitev pravilnega vrstnega reda na X-osi
+    # določite vrstni red z uporabo ključev iz reverse_ocena_map
+    order = [bivanje_rev[i] for i in (bivanje_rev.keys())]
+
+    sns.countplot(df_display_hist, order=order, stat='count')
+
+    plt.title(get_Q_name['bivanje'])
+    plt.xlabel("Število študentov")
+    plt.ylabel("")
+
+    # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
+    plt.xticks(rotation=45, ha='right')
+
+    plt.tight_layout()
+    plt.show()
+    
+def stopnja(df):
+    """Izpiši osnovne statistike."""
+    print('Vprašanje: ' + get_Q_name["stopnja"])
+
+    print("\n📊 Deskriptivna statistika:")
+    pd.options.display.float_format = '{:.2f}'.format
+    print(df["stopnja"].describe())
+
+    # Preverite, ali so vrednosti v stolpcu številke, preden jih mapirate.
+    temp_d_numeric = pd.to_numeric(df["stopnja"], errors='coerce').dropna()
+
+    # Preslikaj številčne vrednosti v opisne za prikaz
+
+    df_display_hist = temp_d_numeric.map(stopnja_rev)
+    plt.figure(figsize=(8, 6))
+
+    # Uporabite pd.Categorical za zagotovitev pravilnega vrstnega reda na X-osi
+    # določite vrstni red z uporabo ključev iz reverse_ocena_map
+    order = [stopnja_rev[i] for i in (stopnja_rev.keys())]
+
+    sns.countplot(df_display_hist, order=order, stat='count')
+
+    plt.title(get_Q_name['stopnja'])
+    plt.xlabel("Število študentov")
+    plt.ylabel("")
+
+    # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
+    plt.xticks(rotation=45, ha='right')
+
+    plt.tight_layout()
+    plt.show()
+
+def področje(df):
+    """Izpiši osnovne statistike."""
+    print('Vprašanje: ' + get_Q_name["področje"])
+
+    print("\n📊 Deskriptivna statistika:")
+    pd.options.display.float_format = '{:.2f}'.format
+    print(df["področje"].describe())
+
+    # Preverite, ali so vrednosti v stolpcu številke, preden jih mapirate.
+    temp_d_numeric = pd.to_numeric(df["področje"], errors='coerce').dropna()
+
+    # Preslikaj številčne vrednosti v opisne za prikaz
+
+    df_display_hist = temp_d_numeric.map(področje_rev)
+    plt.figure(figsize=(8, 6))
+
+    # Uporabite pd.Categorical za zagotovitev pravilnega vrstnega reda na X-osi
+    # določite vrstni red z uporabo ključev iz reverse_ocena_map
+    order = [področje_rev[i] for i in (področje_rev.keys())]
+
+    sns.countplot(df_display_hist, order=order, stat='count')
+
+    plt.title(get_Q_name['področje'])
+    plt.xlabel("Število študentov")
+    plt.ylabel("")
+
+    # Ročno nastavite X-tick etikete, da so pravilno razporejene in rotirane, če je potrebno
+    plt.xticks(rotation=45, ha='right')
+
+    plt.tight_layout()
+    plt.show()
 
 def display_df(df):
     """
@@ -418,33 +593,152 @@ def display_df(df):
         print(df)
         print("-------------------------\n")
 
+
+def korelacijska_matrika(df):
+    """
+    Korelacijska matrika (Pearson) za dejavnike in trditve.
+    """
+    kor_cols = [
+    'subvencionirani_obroki',
+    'sub_obrok_hitra_hrana',
+    'sub_obrok_menza',
+    'sub_obrok_klasika',
+    'sub_obrok_drugo',
+    'doma_teden',
+    'ocena_prehrane',
+    'dejavniki_cena',
+    'dejavniki_okus',
+    'dejavniki_zdravje',
+    'dejavniki_prirocnost',
+    'dejavniki_druzba',
+    'dejavniki_lokacija',
+    'trditve_subcena',
+    'trditve_domacas',
+    'trditve_kontrola',
+    'trditve_frend',
+    'trditve_vpliv',
+    'trditve_subzdravdrag',
+    'trditve_hranilna',
+    'trditve_subzdrav',
+    'starost',
+    'spol',
+    'bivanje',
+    'področje',
+    'stopnja'
+    ]
+
+    corr = df[kor_cols].corr(method='pearson')
+
+    plt.figure(figsize=(24, 20))
+    sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", xticklabels=True, yticklabels=True)
+    plt.title("Korelacijska matrika (Pearson)")
+    plt.tight_layout()
+    plt.show()
+
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+importances_plot = True
+
+def random_forest(df, target):
+    """
+    Random Forest: napovedovanje razreda 'subvencionirani_obroki' na podlagi vseh dejavnikov in trditev.
+    """
+    features = [
+    'subvencionirani_obroki',
+    'sub_obrok_hitra_hrana',
+    'sub_obrok_menza',
+    'sub_obrok_klasika',
+    'sub_obrok_drugo',
+    'doma_teden',
+    'ocena_prehrane',
+    'dejavniki_cena',
+    'dejavniki_okus',
+    'dejavniki_zdravje',
+    'dejavniki_prirocnost',
+    'dejavniki_druzba',
+    'dejavniki_lokacija',
+    'trditve_subcena',
+    'trditve_domacas',
+    'trditve_kontrola',
+    'trditve_frend',
+    'trditve_vpliv',
+    'trditve_subzdravdrag',
+    'trditve_hranilna',
+    'trditve_subzdrav',
+    'starost',
+    'spol',
+    'bivanje',
+    'področje',
+    'stopnja'
+    ]
+    if target not in features:
+        return -2
+
+    features.remove(target)
+    df_sub = df[features + [target]].dropna()
+
+    X = df_sub[features]
+    y = df_sub[target]
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    rf = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf.fit(X_train, y_train)
+    y_pred = rf.predict(X_test)
+
+    # Prikaz top 5 pomembnosti
+    importances = rf.feature_importances_
+    indices = importances.argsort()[::-1][:5]  # Top 5
+
+    # Pripravi lepa imena spremenljivk
+    lepa_imena = [get_Q_name.get(features[i], features[i]) for i in indices]
+
+    plt.figure(figsize=(16, 6))
+    sns.barplot(x=importances[indices], y=lepa_imena, palette='viridis')
+    plt.title(get_Q_name.get(target, target))
+    plt.xlabel("Relativna pomembnost")
+    plt.ylabel("Spremenljivka")
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     # Naloži in očisti podatke
     filepath = "anketa.csv"
     df = load_and_clean_data(filepath)
     #display_df(df)
-
     #Q1
-    #subvencionirani_obroki(df)
+    subvencionirani_obroki(df)
     #Q2
-    #sub_obrok_tip(df)
+    sub_obrok_tip(df)
     #Q3
-    #doma_teden(df)
+    doma_teden(df)
     #Q4
-   #ocena_prehrane(df)
+    ocena_prehrane(df)
     #Q5
-    #dejavniki(df)
+    dejavniki(df)
     #Q6
     trditve(df)
+    #Q7
+    startost(df)
+    #Q8
+    spol(df)
+    #Q9
+    bivanje(df)
+    #Q10
+    področje(df)
+    #Q11
+    stopnja(df)
 
-    #visualize_data(df)
-    #correlation_analysis(df)
-    #regression_analysis(df)
+    random_forest(df, 'subvencioniarni_obroki')
+    random_forest(df, 'ocena_prehrane')
 
-    # 3. Dodatne demografske analize (npr. spol, starostna_skupina)
-    #analyze_by_group(df, group_col="spol")
-    #analyze_by_group(df, group_col="starostna_skupina")  # primer, če obstaja
 
 
 if __name__ == "__main__":
-    main()
+   #main()
+    filepath = "anketa.csv"
+    df = load_and_clean_data(filepath)
+    korelacijska_matrika(df)
